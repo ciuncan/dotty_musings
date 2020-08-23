@@ -1,4 +1,5 @@
 import comptime._
+import functional._
 
 import scala.compiletime._
 
