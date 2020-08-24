@@ -6,6 +6,7 @@ def [A, B, C] (f: A => B => C).flip: B => A => C = b => a => f(a)(b)
 
 trait Functor[F[_]]:
   def [A, B] (f: F[A]).fmap(fun: A => B): F[B]
+  def [A, B] (f: F[A]). map(fun: A => B): F[B] = f fmap fun
 
 trait Prod[F[_]]:
   def [A, B] (fa: F[A]).product(fb: F[B]): F[(A, B)]
@@ -36,6 +37,34 @@ trait Foldable[M[_]]:
   def [A, B] (ma: M[A]).foldMap (f: A => B) (using Functor[M], Monoid[B]) : B = ma.fmap(f).mconcat
 
 
+type StateM[S] = [T] =>> S => (S, T)
+object StateM:
+  def    get[S]           : StateM[S][S]    = s => (s, s)
+  def    set[S](newS: S)  : StateM[S][Unit] = _ => (newS, ())
+  def modify[S](f: S => S): StateM[S][Unit] = s => (f(s), ())
+
+given stateFunctor[S] as Functor[StateM[S]]:
+  type SS[A] = StateM[S][A]
+  def [A, B] (s: SS[A]).fmap(fun: A => B): SS[B] = first => s(first) match
+    case (newState, a) => (newState, fun(a))
+
+given stateProduct[S] as Prod[StateM[S]]:
+  def [A, B] (sa: StateM[S][A]).product(sb: StateM[S][B]): StateM[S][(A, B)] = s => sa(s) match
+    case (newS, a) => sb(newS) match
+      case (newNewS, b) => (newNewS, a -> b)
+
+given stateApplicative[S] as Applicative[StateM[S]]:
+  def [A](a: A).pure: StateM[S][A] = s => (s, a)
+
+given stateMonad[S] as Monad[StateM[S]]:
+  def [A, B] (sa: StateM[S][A]).bind(f: A => StateM[S][B]): StateM[S][B] = s => sa(s) match
+    case (newS, a) => f(a)(newS)
+
+extension [S, A] (sm: StateM[S][A]):
+  def repeat(n: Int): StateM[S][A] =
+    if n <= 0
+    then sm
+    else sm >> sm.repeat(n - 1)
 
 given Functor[Option]:
   def [A, B] (oa: Option[A]).fmap(f: A => B): Option[B] = oa.map(f)
